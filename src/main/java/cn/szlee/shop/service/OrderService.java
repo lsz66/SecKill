@@ -1,14 +1,18 @@
 package cn.szlee.shop.service;
 
+import cn.szlee.shop.common.Constant;
 import cn.szlee.shop.exception.SoldOutException;
 import cn.szlee.shop.mapper.OrderMapper;
 import cn.szlee.shop.mapper.ProductMapper;
 import cn.szlee.shop.model.SecKillOrder;
 import cn.szlee.shop.model.Product;
-import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import javax.annotation.PostConstruct;
+import java.util.List;
 
 /**
  * <b><code>OrderService</code></b>
@@ -24,9 +28,18 @@ import org.springframework.transaction.annotation.Transactional;
 public class OrderService extends ServiceImpl<OrderMapper, SecKillOrder> {
 
     private final ProductMapper productMapper;
+    private final StringRedisTemplate redisTemplate;
 
-    public OrderService(ProductMapper productMapper) {
+
+    public OrderService(ProductMapper productMapper, StringRedisTemplate redisTemplate) {
         this.productMapper = productMapper;
+        this.redisTemplate = redisTemplate;
+    }
+
+    @PostConstruct
+    public void init() {
+        List<Product> products = productMapper.selectList(null);
+        products.forEach(item -> redisTemplate.opsForValue().set(Constant.REDIS_PRODUCT_STOCK_PREFIX + item.getId(), String.valueOf(item.getStock())));
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -34,8 +47,7 @@ public class OrderService extends ServiceImpl<OrderMapper, SecKillOrder> {
 
         // 查询商品
         Product product = productMapper.selectById(productId);
-        int stock = product.getStock();
-        if (stock <= 0) {
+        if (product.getStock() <= 0) {
             throw new SoldOutException();
         }
 
