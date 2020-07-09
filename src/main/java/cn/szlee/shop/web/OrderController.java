@@ -9,6 +9,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  * <b><code>OrderController</code></b>
  * <p/>
@@ -25,6 +28,7 @@ public class OrderController {
 
     private final OrderService orderService;
     private final StringRedisTemplate redisTemplate;
+    private final Map<Integer, Boolean> productSoldOutMap = new ConcurrentHashMap<>();
 
     public OrderController(OrderService orderService, StringRedisTemplate redisTemplate) {
         this.orderService = orderService;
@@ -33,15 +37,25 @@ public class OrderController {
 
     @PostMapping
     public ResponseMessage secKill(Integer productId) {
-        Long stock = redisTemplate.opsForValue().decrement(Constant.REDIS_PRODUCT_STOCK_PREFIX + productId);
+        if (productSoldOutMap.get(productId) != null) {
+            return ResponseMessage.error();
+        }
+        String key = Constant.REDIS_PRODUCT_STOCK_PREFIX + productId;
+        Long stock = redisTemplate.opsForValue().decrement(key);
         assert stock != null;
         if (stock < 0) {
+            productSoldOutMap.put(productId, true);
+            redisTemplate.opsForValue().increment(key);
             return ResponseMessage.error();
         }
         try {
             orderService.secKill(productId);
             return ResponseMessage.success();
         } catch (SoldOutException e) {
+            redisTemplate.opsForValue().increment(key);
+            if (productSoldOutMap.get(productId) != null) {
+                productSoldOutMap.remove(productId);
+            }
             return ResponseMessage.error();
         }
     }
