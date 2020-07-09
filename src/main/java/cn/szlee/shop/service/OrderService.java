@@ -5,6 +5,7 @@ import cn.szlee.shop.mapper.OrderMapper;
 import cn.szlee.shop.mapper.ProductMapper;
 import cn.szlee.shop.model.SecKillOrder;
 import cn.szlee.shop.model.Product;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,8 +43,8 @@ public class OrderService extends ServiceImpl<OrderMapper, SecKillOrder> {
         save(SecKillOrder.of(productId));
 
         // 减库存
-        product.setStock(stock - 1);
-        if (productMapper.updateById(product) <= 0) {
+        int update = productMapper.deductStock(productId);
+        if (update <= 0) {
             throw new SoldOutException();
         }
     }
